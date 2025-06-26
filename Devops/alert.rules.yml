@@ -1,0 +1,20 @@
+groups:
+  - name: jenkins-job-alerts
+    rules:
+      - alert: JenkinsJobFailed
+        expr: jenkins_job_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Jenkins job failed"
+          description: "Job {{ $labels.job }} has failed."
+
+      - alert: JenkinsJobAnomaly
+        expr: jenkins_job_anomaly == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Jenkins job anomaly"
+          description: "Anomaly detected for job {{ $labels.job }}." 

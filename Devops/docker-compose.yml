@@ -1,0 +1,87 @@
+services:
+  mysqldbs:
+    image: mysql:5.7
+    container_name: mysqldbs
+    environment:
+      MYSQL_ROOT_PASSWORD: Crow@6083
+      MYSQL_DATABASE: crud
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - devopsnet
+
+  springboot-backend:
+    build:
+      context: ./springboot-backend
+    container_name: springboot-backend
+    ports:
+      - "8020:8020"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldbs:3306/crud
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=Crow@6083
+    depends_on:
+      mysqldbs:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+    networks:
+      - devopsnet
+
+  ml-service:
+    build:
+      context: ./ml-service
+    container_name: ml-service
+    ports:
+      - "5000:5000"
+    networks:
+      - devopsnet
+
+  react-frontend:
+    build:
+      context: ./react-frontend
+    container_name: react-frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - devopsnet
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - springboot-backend
+    networks:
+      - devopsnet
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - devopsnet
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    networks:
+      - devopsnet
+
+networks:
+  devopsnet:
+    driver: bridge
