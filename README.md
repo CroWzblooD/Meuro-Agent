@@ -1,4 +1,4 @@
-# 🚀 DevOps Intelligence Dashboard
+# 🚀 DevOps Intelligence Agent
 
 <div align="center">
 
