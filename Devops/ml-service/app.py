@@ -11,17 +11,18 @@ app = Flask(__name__)
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    print("[ML SERVICE] /analyze endpoint called!")
     data = request.get_json()
     durations = np.array(data.get('durations', []))
     statuses = data.get('statuses', [])
     latest_status = data.get('latest_status', '')
     latest_duration = data.get('latest_duration', 0)
-    print(f"[ML] Received durations: {durations}, statuses: {statuses}, latest_status: {latest_status}, latest_duration: {latest_duration}")
+    print(f"[ML SERVICE] Received durations: {durations}, statuses: {statuses}, latest_status: {latest_status}, latest_duration: {latest_duration}")
     anomalies = []
     # Flag any FAILURE as anomaly
     if latest_status == 'FAILURE':
         anomalies.append(int(latest_duration))
-        print(f"[ML] Detected anomaly due to FAILURE status: {latest_duration}")
+        print(f"[ML SERVICE] Detected anomaly due to FAILURE status: {latest_duration}")
     # Also do statistical anomaly detection
     if len(durations) > 2:
         mean = durations.mean()
@@ -29,9 +30,9 @@ def analyze():
         for i, d in enumerate(durations):
             if abs(d - mean) > 2 * std:
                 anomalies.append(int(d))
-        print(f"[ML] Detected statistical anomalies: {anomalies}")
+        print(f"[ML SERVICE] Detected statistical anomalies: {anomalies}")
     response = {'anomalies': anomalies}
-    print(f"[ML] Response: {response}")
+    print(f"[ML SERVICE] Response: {response}")
     return jsonify(response)
 
 @app.route('/predict-failure', methods=['POST'])

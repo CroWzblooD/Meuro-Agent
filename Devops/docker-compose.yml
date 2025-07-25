@@ -6,7 +6,7 @@ services:
       MYSQL_ROOT_PASSWORD: Crow@6083
       MYSQL_DATABASE: crud
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -55,6 +55,7 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alert.rules.yml:/etc/prometheus/alert.rules.yml
     ports:
       - "9090:9090"
     depends_on:
@@ -81,6 +82,10 @@ services:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
     networks:
       - devopsnet
+
+
+
+
 
 networks:
   devopsnet:

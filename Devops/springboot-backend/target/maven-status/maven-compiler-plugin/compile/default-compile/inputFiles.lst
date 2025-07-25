@@ -1,10 +1,9 @@
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\controllers\JenkinsController.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\CrudSpringApplication.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\models\Employe.java
-C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\controller\EmployeController.java
+C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\controllers\EmployeController.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\services\JenkinsService.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\exception\ResourceNotFoundException.java
-C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\controller\JenkinsController.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\models\JenkinsJob.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\repository\EmployeRepository.java
 C:\Users\imash\Downloads\Devops_project\Devops\springboot-backend\src\main\java\com\example\crudspring\services\EmployeService.java

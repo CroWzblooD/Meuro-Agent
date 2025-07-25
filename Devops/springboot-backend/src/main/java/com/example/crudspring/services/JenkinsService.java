@@ -26,15 +26,21 @@ import io.micrometer.core.instrument.Tags;
 @Service
 public class JenkinsService {
     @Value("${jenkins.url}")
-    private String jenkinsUrl;
+    private String defaultJenkinsUrl;
 
     @Value("${jenkins.job}")
-    private String jobName;
+    private String defaultJobName;
 
     @Value("${jenkins.user}")
-    private String jenkinsUser;
+    private String defaultJenkinsUser;
 
     @Value("${jenkins.token}")
+    private String defaultJenkinsToken;
+
+    // Dynamic configuration - can be updated via API
+    private String jenkinsUrl;
+    private String jobName;
+    private String jenkinsUser;
     private String jenkinsToken;
 
     @Value("${ml.service.url}")
@@ -46,10 +52,68 @@ public class JenkinsService {
 
     public JenkinsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
+        // Initialize with default values
+        initializeDefaults();
+    }
+
+    private void initializeDefaults() {
+        this.jenkinsUrl = this.defaultJenkinsUrl;
+        this.jobName = this.defaultJobName;
+        this.jenkinsUser = this.defaultJenkinsUser;
+        this.jenkinsToken = this.defaultJenkinsToken;
+    }
+
+    public Map<String, Object> updateJenkinsConfig(Map<String, String> config) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            if (config.containsKey("url")) {
+                this.jenkinsUrl = config.get("url");
+            }
+            if (config.containsKey("user")) {
+                this.jenkinsUser = config.get("user");
+            }
+            if (config.containsKey("token")) {
+                this.jenkinsToken = config.get("token");
+            }
+            if (config.containsKey("job")) {
+                this.jobName = config.get("job");
+            }
+
+            // Test the connection with new credentials
+            List<JenkinsJob> jobs = getAllJobs();
+            
+            result.put("status", "success");
+            result.put("message", "Jenkins configuration updated successfully");
+            result.put("jobCount", jobs.size());
+            result.put("jobs", jobs);
+        } catch (Exception e) {
+            result.put("status", "error");
+            result.put("message", "Failed to update Jenkins configuration: " + e.getMessage());
+            result.put("jobCount", 0);
+        }
+        return result;
+    }
+
+    public Map<String, Object> getJenkinsConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("url", this.jenkinsUrl != null ? this.jenkinsUrl : this.defaultJenkinsUrl);
+        config.put("user", this.jenkinsUser != null ? this.jenkinsUser : this.defaultJenkinsUser);
+        config.put("job", this.jobName != null ? this.jobName : this.defaultJobName);
+        
+        // Handle token display safely
+        String tokenToShow = this.jenkinsToken != null ? this.jenkinsToken : this.defaultJenkinsToken;
+        if (tokenToShow != null && tokenToShow.length() > 4 && !tokenToShow.equals("your-jenkins-token-here")) {
+            config.put("token", "***" + tokenToShow.substring(tokenToShow.length() - 4));
+        } else {
+            config.put("token", "");
+        }
+        
+        return config;
     }
 
     public void pollJenkinsJob() {
         try {
+            System.out.println("[BACKEND] Polling Jenkins job at: " + jenkinsUrl);
             // Call Jenkins API for last build info with Basic Auth
             String apiUrl = jenkinsUrl + "/job/" + jobName + "/lastBuild/api/json";
             HttpHeaders headers = new HttpHeaders();
@@ -58,8 +122,11 @@ public class JenkinsService {
             String authHeader = "Basic " + new String(encodedAuth);
             headers.set("Authorization", authHeader);
             HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            System.out.println("[BACKEND] Making request to: " + apiUrl);
             ResponseEntity<Map> response = restTemplate.exchange(apiUrl, HttpMethod.GET, entity, Map.class);
-            Map<String, Object> buildInfo = response.getBody();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> buildInfo = (Map<String, Object>) response.getBody();
             if (buildInfo != null) {
                 String status = (String) buildInfo.get("result"); // e.g., "SUCCESS"
                 Long duration = ((Number) buildInfo.get("duration")).longValue() / 1000; // ms to s
@@ -78,25 +145,33 @@ public class JenkinsService {
                 HttpEntity<Map<String, Object>> mlEntity = new HttpEntity<>(request, mlHeaders);
                 boolean anomalyDetected = false;
                 try {
+                    System.out.println("[BACKEND] Calling ML service at: " + mlServiceUrl);
                     ResponseEntity<Map> mlResponse = restTemplate.postForEntity(mlServiceUrl, mlEntity, Map.class);
-                    Object anomalies = mlResponse.getBody().get("anomalies");
-                    System.out.println("Anomalies detected: " + anomalies);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> mlBody = (Map<String, Object>) mlResponse.getBody();
+                    Object anomalies = mlBody.get("anomalies");
+                    System.out.println("[BACKEND] ML service response: " + anomalies);
                     if (anomalies instanceof List && !((List<?>) anomalies).isEmpty()) {
                         anomalyDetected = true;
+                        System.out.println("[BACKEND] Anomaly detected by ML service!");
                     }
                 } catch (Exception e) {
-                    System.out.println("ML service call failed: " + e.getMessage());
+                    System.out.println("[BACKEND] ML service call failed: " + e.getMessage());
                 }
 
                 recordJobMetrics(jobName, status, duration, anomalyDetected);
             }
         } catch (Exception e) {
-            System.out.println("Jenkins API call failed: " + e.getMessage());
+            System.out.println("[BACKEND] Jenkins API call failed: " + e.getMessage());
         }
     }
 
     public List<JenkinsJob> getAllJobs() {
         try {
+            System.out.println("[JENKINS] Fetching jobs from: " + jenkinsUrl);
+            System.out.println("[JENKINS] Using user: " + jenkinsUser);
+            System.out.println("[JENKINS] Token length: " + (jenkinsToken != null ? jenkinsToken.length() : 0));
+            
             // Fetch jobs from Jenkins API
             String apiUrl = jenkinsUrl + "/api/json?tree=jobs[name,color]";
             HttpHeaders headers = new HttpHeaders();
@@ -105,28 +180,52 @@ public class JenkinsService {
             String authHeader = "Basic " + new String(encodedAuth);
             headers.set("Authorization", authHeader);
             HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            System.out.println("[JENKINS] Making request to: " + apiUrl);
             ResponseEntity<Map> response = restTemplate.exchange(apiUrl, HttpMethod.GET, entity, Map.class);
-            Map<String, Object> body = response.getBody();
+            System.out.println("[JENKINS] Response status: " + response.getStatusCode());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) response.getBody();
+            @SuppressWarnings("unchecked")
             List<Map<String, Object>> jobs = (List<Map<String, Object>>) body.get("jobs");
+            
+            System.out.println("[JENKINS] Found " + (jobs != null ? jobs.size() : 0) + " jobs");
+            
             List<JenkinsJob> result = new java.util.ArrayList<>();
-            for (Map<String, Object> job : jobs) {
-                String name = (String) job.get("name");
-                // Fetch last build for each job
-                String buildUrl = jenkinsUrl + "/job/" + name + "/lastBuild/api/json";
-                ResponseEntity<Map> buildResp = restTemplate.exchange(buildUrl, HttpMethod.GET, entity, Map.class);
-                Map<String, Object> buildInfo = buildResp.getBody();
-                if (buildInfo != null) {
-                    String status = (String) buildInfo.get("result");
-                    Long duration = ((Number) buildInfo.get("duration")).longValue() / 1000; // ms to s
-                    duration = duration * 3; // Simulate longer duration
-                    Long timestampMs = ((Number) buildInfo.get("timestamp")).longValue();
-                    LocalDateTime timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneId.systemDefault());
-                    result.add(new JenkinsJob(name, status, timestamp, duration));
+            if (jobs != null) {
+                for (Map<String, Object> job : jobs) {
+                    String name = (String) job.get("name");
+                    System.out.println("[JENKINS] Processing job: " + name);
+                    
+                    try {
+                        // Fetch last build for each job
+                        String buildUrl = jenkinsUrl + "/job/" + name + "/lastBuild/api/json";
+                        System.out.println("[JENKINS] Fetching build info from: " + buildUrl);
+                        ResponseEntity<Map> buildResp = restTemplate.exchange(buildUrl, HttpMethod.GET, entity, Map.class);
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> buildInfo = (Map<String, Object>) buildResp.getBody();
+                        if (buildInfo != null) {
+                            String status = (String) buildInfo.get("result");
+                            Long duration = ((Number) buildInfo.get("duration")).longValue() / 1000; // ms to s
+                            duration = duration * 3; // Simulate longer duration
+                            Long timestampMs = ((Number) buildInfo.get("timestamp")).longValue();
+                            LocalDateTime timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestampMs), ZoneId.systemDefault());
+                            result.add(new JenkinsJob(name, status, timestamp, duration));
+                            System.out.println("[JENKINS] Added job: " + name + " with status: " + status);
+                        }
+                    } catch (Exception buildEx) {
+                        System.out.println("[JENKINS] Failed to fetch build info for job " + name + ": " + buildEx.getMessage());
+                        // Add job with default values if build info fails
+                        result.add(new JenkinsJob(name, "UNKNOWN", LocalDateTime.now(), 0L));
+                    }
                 }
             }
+            System.out.println("[JENKINS] Returning " + result.size() + " jobs");
             return result;
         } catch (Exception e) {
-            System.out.println("Jenkins API call failed: " + e.getMessage());
+            System.out.println("[JENKINS] Jenkins API call failed: " + e.getMessage());
+            e.printStackTrace();
             return java.util.Collections.emptyList();
         }
     }
@@ -136,6 +235,62 @@ public class JenkinsService {
         meterRegistry.gauge("jenkins_job_status", Tags.of("job", jobName), statusValue);
         meterRegistry.gauge("jenkins_job_duration_seconds", Tags.of("job", jobName), durationSeconds);
         meterRegistry.gauge("jenkins_job_anomaly", Tags.of("job", jobName), anomalyDetected ? 1 : 0);
+    }
+    
+    // Method to manually trigger polling for frontend
+    public Map<String, Object> triggerPoll() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            pollJenkinsJob();
+            List<JenkinsJob> jobs = getAllJobs();
+            result.put("status", "success");
+            result.put("message", "Jenkins polling completed successfully");
+            result.put("jobs", jobs);
+        } catch (Exception e) {
+            result.put("status", "error");
+            result.put("message", "Jenkins polling failed: " + e.getMessage());
+            result.put("jobs", java.util.Collections.emptyList());
+        }
+        return result;
+    }
+
+    public Map<String, Object> debugConnection() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            result.put("jenkinsUrl", jenkinsUrl);
+            result.put("jenkinsUser", jenkinsUser);
+            result.put("tokenLength", jenkinsToken != null ? jenkinsToken.length() : 0);
+            
+            // Test basic connection
+            String apiUrl = jenkinsUrl + "/api/json";
+            HttpHeaders headers = new HttpHeaders();
+            String auth = jenkinsUser + ":" + jenkinsToken;
+            byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes(StandardCharsets.UTF_8));
+            String authHeader = "Basic " + new String(encodedAuth);
+            headers.set("Authorization", authHeader);
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            System.out.println("[DEBUG] Testing connection to: " + apiUrl);
+            System.out.println("[DEBUG] Auth header: " + authHeader.substring(0, 20) + "...");
+            
+            ResponseEntity<Map> response = restTemplate.exchange(apiUrl, HttpMethod.GET, entity, Map.class);
+            result.put("connectionStatus", "SUCCESS");
+            result.put("responseCode", response.getStatusCode().value());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) response.getBody();
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> jobs = (List<Map<String, Object>>) body.get("jobs");
+            result.put("rawJobsCount", jobs != null ? jobs.size() : 0);
+            result.put("rawJobs", jobs);
+            
+        } catch (Exception e) {
+            result.put("connectionStatus", "FAILED");
+            result.put("error", e.getMessage());
+            result.put("errorType", e.getClass().getSimpleName());
+            e.printStackTrace();
+        }
+        return result;
     }
 
     public Map<String, Object> getJobInsights(String jobName) {
@@ -163,7 +318,9 @@ public class JenkinsService {
                 HttpEntity<Map<String, Object>> mlEntity = new HttpEntity<>(request, mlHeaders);
                 System.out.println("[ML] Sending to ML service: " + request);
                 ResponseEntity<Map> mlResponse = restTemplate.postForEntity(mlServiceUrl, mlEntity, Map.class);
-                Object anomalies = mlResponse.getBody().get("anomalies");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> mlBody = (Map<String, Object>) mlResponse.getBody();
+                Object anomalies = mlBody.get("anomalies");
                 System.out.println("[ML] ML service response: " + anomalies);
                 if (anomalies instanceof List && !((List<?>) anomalies).isEmpty()) {
                     anomaly = true;
