@@ -1,4 +1,4 @@
-# 🚀 DevOps Intelligence Agent
+# 🚀 Meuro Agent
 
 <div align="center">
 
